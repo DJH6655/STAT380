@@ -1,0 +1,122 @@
+---
+title: "STAT380 Project"
+author: "Dylan Holliday and Nixon Kameen"
+date: "2025-11-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Install Packages:
+
+```{r}
+library(RKaggle)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(caret)
+```
+
+
+Read in Data
+
+```{r}
+loan_approval <- get_dataset("architsharma01/loan-approval-prediction-dataset")
+
+loan_approval %>% head()
+```
+
+## Research Question
+
+We want to know if loan information, annual income, credit score, and asset valuation can accurately predict whether the proposed loan will be accepted or rejected. We want to set a standard of 90% for our model's goal accuracy, but we will also look at other performance metrics to get a better understanding of Where the model is excelling and failing. We will use logistic regression as a baseline model and compare its performance with that of kNN and a Random Forest Classifier.
+
+Let's first understand how many loans are approved vs. rejected:
+
+```{r}
+loan_approval %>% ggplot(aes(x = loan_status)) +
+  geom_bar() +
+  theme_minimal()
+```
+
+The distribution has many observations in each category meaning that we do not necessarily have to address the imbalance of classes. However, the difference is enough to merit keeping an eye on the F1 score as opposed to accuracy for our model predictions.
+
+First let's convert the loan status variable to be 0 or 1 to make the data better for model usage:
+
+```{r}
+loan_approval <- loan_approval %>%
+  mutate(
+    loan_status = if_else(loan_status == 'Approved', 1, 0)
+  )
+```
+
+
+Let's implement a Logistic Regression model and apply ten-fold cross validation to retrieve the performance metrics:
+
+```{r}
+#Assign folds values and permute
+num_folds <- 10
+folds <- cut(x = 1:nrow(loan_approval), breaks = num_folds, labels = FALSE)
+
+set.seed(1103)
+folds <- sample(folds)
+set.seed(NULL)
+
+#Create storage for loop output
+met_mat <- matrix(NA, nrow = num_folds, ncol = 2)
+
+#Loop
+for (i in 1:num_folds) {
+  Test_ind <- which(folds == i)
+  Test_set <- loan_approval[Test_ind, ]
+  Train_set <- loan_approval[-Test_ind, ]
+  
+  #Build Model
+  log_model <- glm(loan_status ~ no_of_dependents +
+                     education + self_employed +
+                     income_annum + loan_amount +
+                     loan_term + cibil_score +
+                     residential_assets_value +
+                     commercial_assets_value +
+                     luxury_assets_value +
+                     bank_asset_value, 
+                   data = Train_set)
+    
+
+  #Make predictions
+  pred_log <- predict(log_model,
+                      newdata = Test_set, 
+                      type = 'response')
+  
+  #Apply threshold
+  pred_log <- factor(if_else(pred_log > .5, 1, 0))
+  act_log <- factor(Test_set$loan_status)
+  
+  # Calculate Accuracy and F1 score
+  accuracy <- mean(pred_log == act_log)
+  
+  metrics <- confusionMatrix(pred_log, act_log,
+                             mode = "everything", positive = "1") 
+  
+  f1 <- metrics$byClass["F1"]
+  
+  
+  #Add to the Accuracy vector
+  met_mat[i, 1] = accuracy
+  met_mat[i, 2] = f1
+}
+
+#Calculate the mean across folds
+avg_acc <- mean(met_mat[ , 1])
+avg_f1 <- mean(met_mat[ , 2])
+
+avg_acc
+avg_f1
+```
+
+
+kNN Model:
+
+
+
