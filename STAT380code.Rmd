@@ -30,17 +30,93 @@ loan_approval <- get_dataset("architsharma01/loan-approval-prediction-dataset")
 loan_approval %>% head()
 ```
 
-## Research Question
+## Task 1
+Research Question: What basic patterns appear in the dataset regarding income, credit score, and loan approval status?
 
-We want to know if loan information, annual income, credit score, and asset valuation can accurately predict whether the proposed loan will be accepted or rejected. We want to set a standard of 90% for our model's goal accuracy, but we will also look at other performance metrics to get a better understanding of Where the model is excelling and failing. We will use logistic regression as a baseline model and compare its performance with that of kNN and a Random Forest Classifier.
 
 Let's first understand how many loans are approved vs. rejected:
-
 ```{r}
 loan_approval %>% ggplot(aes(x = loan_status)) +
   geom_bar() +
   theme_minimal()
 ```
+The dataset contains more approved loans than rejected ones, indicating a moderate class imbalance where approvals occur substantially more frequently than rejections
+
+Next, lets take a look at a simple histogram to show how income is spread.
+```{r}
+loan_approval %>%
+  ggplot(aes(x = income_annum)) +
+  geom_histogram(fill = "darkorange", color="black", bins = 30) +
+  theme_minimal() +
+  labs(title = "Distribution of Annual Income",
+       x = "Annual Income",
+       y = "Count")
+```
+Annual income is spread fairly evenly across a wide range, with no single income level dominating the dataset, indicating that applicants come from a broad variety of financial backgrounds.
+
+Next, lets take a look at credit scores in relation to loan status
+```{r}
+loan_approval %>%
+  ggplot(aes(x = loan_status, y = cibil_score, fill = loan_status)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "CIBIL Score by Loan Status",
+       x = "Loan Status",
+       y = "CIBIL Score")
+```
+Approved applicants tend to have significantly higher CIBIL scores than rejected applicants, indicating that credit score is a strong differentiator in loan approval decisions
+
+##Task 2
+Research Question: Which applicant characteristics are associated with the requested loan amount, and how does annual income relate to loan amount within a linear regression model?
+
+To build our linear regression model for loan amount, we use forward selection. This method starts with an empty model and adds predictors one at a time. At each step, it chooses the variable that improves the model the most based on AIC. The process continues until adding more variables no longer helps. This approach keeps the model easy to interpret while still including the predictors that actually matter.
+
+Null model (no predictors)
+```{r}
+null_model <- lm(loan_amount ~ 1, data = loan_approval)
+```
+
+Full model (all numeric predictors)
+```{r}
+# Full model (all numeric predictors)
+full_model <- lm(loan_amount ~ income_annum +
+                                   cibil_score +
+                                   loan_term +
+                                   no_of_dependents +
+                                   residential_assets_value +
+                                   commercial_assets_value +
+                                   luxury_assets_value +
+                                   bank_asset_value,
+                                   data = loan_approval)
+```
+
+Forward Selection
+```{r}
+step_model <- step(null_model,
+                   scope = formula(full_model),
+                   direction = "forward",
+                   trace = FALSE)
+
+summary(step_model)
+```
+Forward selection produced a model with annual income, commercial asset value, and number of dependents as the key predictors of loan amount. Income is the strongest predictor, with higher–income applicants requesting larger loans. Commercial assets also have a small positive effect, while number of dependents has a weaker negative effect. Overall, the model explains a large share of the variation in loan amount (R² ≈ 0.86), indicating that these financial factors play an important role in loan size.
+
+```{r}
+loan_approval %>%
+  ggplot(aes(x = income_annum, y = loan_amount)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = FALSE, color="blue") +
+  theme_minimal() +
+  labs(title = "Loan Amount vs Annual Income",
+       x = "Annual Income",
+       y = "Loan Amount")
+```
+There is a strong positive relationship between annual income and loan amount, with higher–income applicants consistently requesting larger loans.
+
+
+##Task 3
+Question:
+We want to know if loan information, annual income, credit score, and asset valuation can accurately predict whether the proposed loan will be accepted or rejected. We want to set a standard of 90% for our model's goal accuracy, but we will also look at other performance metrics to get a better understanding of Where the model is excelling and failing. We will use logistic regression as a baseline model and compare its performance with that of kNN and a Random Forest Classifier.
 
 The distribution has many observations in each category meaning that we do not necessarily have to address the imbalance of classes. However, the difference is enough to merit keeping an eye on the F1 score as opposed to accuracy for our model predictions.
 
@@ -197,7 +273,6 @@ ggplot(data = ACC_df, mapping = aes(x = NN, y = ACC)) +
   theme_minimal()
 
 ```
-
 From this plot, k = 15 looks like a good k because the accuracy does not increase by much after that.
 
 Let's try 10 fold cross validation for this value of k and a different seed and compile the results.
