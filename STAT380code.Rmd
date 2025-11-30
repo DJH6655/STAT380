@@ -336,13 +336,135 @@ avg_f1
 
 These results show that the knn model performs about as well as the logistic regression model, with only a slightly worse accuracy and f1 score than the logistic regression model.
 
+Random Forest:
 
 
 
 
+```{r}
+#Assign folds values and permute
+num_folds <- 5
+folds <- cut(x = 1:nrow(loan_knn), breaks = num_folds, labels = FALSE)
+
+set.seed(1103)
+folds <- sample(folds)
+set.seed(NULL)
+
+#Assign constants and create storage for loop output
+maxK <- 40
+ACC_mat <- matrix(NA, nrow = num_folds, ncol = maxK)
+
+#Loop
+for (i in 1:num_folds) {
+  Test_ind <- which(folds == i)
+  Test <- loan_knn[Test_ind, ]
+  Train <- loan_knn[-Test_ind, ]
+  
+  for (j in 2:maxK) {
+    #Build Model
+    rf_model <- randomForest(factor(loan_status) ~ no_of_dependents +
+                     education + self_employed +
+                     income_annum + loan_amount +
+                     loan_term + cibil_score +
+                     residential_assets_value +
+                     commercial_assets_value +
+                     luxury_assets_value +
+                     bank_asset_value , data = Train, ntree = j, mtry = 3)
+    
+    pred <- predict(rf_model, newdata = Test[ , xvars])
+    
+    #Add Predictions to test set
+    Test <- Test %>%
+      mutate(pred_status = pred)
+    
+    # Calculate Accuracy
+    accuracy <- mean(Test$pred_status == Test$loan_status)
+    
+    #Add to the Accuracy matrix
+    ACC_mat[i,j] <- accuracy
+  }
+}
+
+#Calculate the mean across folds
+ACC_vec <- colMeans(ACC_mat)
+
+ACC_df <- data.frame(NN= 1:40, ACC = ACC_vec)
+
+#Plot the accuracy against k for each model
+ggplot(data = ACC_df, mapping = aes(x = NN, y = ACC)) +
+  geom_line() +
+  labs(x = "ntree",
+       y = "Accuracy") +
+  theme_minimal()
+
+```
+
+From this plot, accuracy increases by less around ntree = 13, so this seems like a good number to use. Let's use ten fold cross validation and get model metrics:
 
 
+```{r}
+#Assign folds values and permute
+num_folds <- 10
+folds <- cut(x = 1:nrow(loan_knn), breaks = num_folds, labels = FALSE)
 
+set.seed(123)
+folds <- sample(folds)
+set.seed(NULL)
+
+#Assign constants and create storage for loop output
+met_mat <- matrix(NA, nrow = num_folds, ncol = 2)
+
+#Loop
+for (i in 1:num_folds) {
+  Test_ind <- which(folds == i)
+  Test <- loan_knn[Test_ind, ]
+  Train <- loan_knn[-Test_ind, ]
+  
+  
+  #Build Model
+  rf_model <- randomForest(factor(loan_status) ~ no_of_dependents +
+                     education + self_employed +
+                     income_annum + loan_amount +
+                     loan_term + cibil_score +
+                     residential_assets_value +
+                     commercial_assets_value +
+                     luxury_assets_value +
+                     bank_asset_value , 
+                     data = Train, ntree = 13, mtry = 3)
+  pred <- predict(rf_model, newdata = Test[ , xvars])
+    
+  #Add Predictions to test set
+  Test <- Test %>%
+    mutate(pred_status = pred)
+    
+  #Separate predictions and results
+  pred_rf <- factor(Test$pred_status)
+  act_rf <- factor(Test$loan_status)
+  
+  # Calculate Accuracy and F1 score
+  accuracy <- mean(pred_rf == act_rf)
+  
+  metrics <- confusionMatrix(pred_rf,
+                             act_rf,
+                             mode = "everything", positive = "1") 
+  
+  f1 <- metrics$byClass["F1"]
+  
+  
+  #Add to the Accuracy vector
+  met_mat[i, 1] = accuracy
+  met_mat[i, 2] = f1
+}
+
+#Calculate the mean across folds
+avg_acc <- mean(met_mat[ , 1])
+avg_f1 <- mean(met_mat[ , 2])
+
+avg_acc
+avg_f1
+```
+
+The accuracy and F1 scores are even higher here, suggesting that the random forest model outperforms Logistic Regression and kNN.
 
 
 
